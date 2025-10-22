@@ -12,38 +12,60 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-const __dirname = path.resolve();
 
-// middleware
-if (process.env.NODE_ENV !== "production") {
-  app.use(
-    cors({
-      origin: "http://localhost:5173",
-    })
-  );
-}
-app.use(express.json()); // this middleware will parse JSON bodies: req.body
+// Middleware
+app.use(express.json());
 app.use(rateLimiter);
 
-// our simple custom middleware
-// app.use((req, res, next) => {
-//   console.log(`Req method is ${req.method} & Req URL is ${req.url}`);
-//   next();
-// });
-
-app.use("/api/notes", notesRoutes);
-app.use(express.json()); // to read JSON body
-app.use("/api/auth", authRoutes);
+// CORS configuration - ONLY mention your frontend URL
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
-  });
+  // In production, allow your Vercel frontend
+  app.use(cors({ 
+    origin: "https://note-ado.vercel.app", // ONLY your frontend URL
+    credentials: true 
+  }));
+} else {
+  // Development - allow local frontend
+  app.use(cors({ 
+    origin: "http://localhost:5173",
+    credentials: true 
+  }));
 }
+
+// Routes
+app.use("/api/notes", notesRoutes);
+app.use("/api/auth", authRoutes);
+
+// Health check route
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    message: "Backend is running!", 
+    timestamp: new Date().toISOString() 
+  });
+});
+
+// REMOVED all frontend serving code - no more dist/index.html references!
+
+// Basic root route
+app.get("/", (req, res) => {
+  res.json({ 
+    message: "Backend API is running!",
+    frontend: "https://note-ado.vercel.app",
+    health_check: "/api/health"
+  });
+});
+
+// Error handling for undefined routes
+app.use((req, res) => {
+  res.status(404).json({ message: "Route not found" });
+});
 
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log("Server started on PORT:", PORT);
+    console.log("Environment:", process.env.NODE_ENV || "development");
   });
+}).catch((error) => {
+  console.error("Failed to connect to database:", error);
+  process.exit(1);
 });
